@@ -1,0 +1,104 @@
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const User = require("./models/User");
+const Bunk = require("./models/Bunk");
+require("dotenv").config();
+
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json({ limit: "50mb" })); // Increase limit for Base64 document uploads
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Routes
+const authRoutes = require("./routes/authRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const bunkRoutes = require("./routes/bunkRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+
+app.use("/api/auth", authRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/bunks", bunkRoutes);
+app.use("/api/admin", adminRoutes);
+
+// Self-Seeding Database Function
+async function seedDatabase() {
+  try {
+    // 1. Seed Admin Account if not exists
+    const adminExists = await User.findOne({ role: "admin" });
+    if (!adminExists) {
+      console.log("Seeding default Admin account...");
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash("admin123", salt);
+      
+      const adminUser = new User({
+        name: "Fuel Express Admin",
+        mobile: "9876543210",
+        email: "admin@fuelexpress.com",
+        password: hashedPassword,
+        role: "admin",
+        adminId: "admin",
+        status: "active"
+      });
+      await adminUser.save();
+      console.log("Default Admin seeded. ID: 'admin', Mobile: '9876543210', Password: 'admin123'");
+    }
+
+    // 2. Seed Bunks if none exist
+    const bunksCount = await Bunk.countDocuments();
+    if (bunksCount === 0) {
+      console.log("Seeding default petrol stations...");
+      const defaultBunks = [
+        {
+          name: "Bharat Petroleum (BPCL) - Central Station",
+          address: "12, Mahatma Gandhi Road, Bangalore",
+          latitude: 12.971598,
+          longitude: 77.594562,
+          fuels: ["Petrol", "Diesel", "EV Charging"]
+        },
+        {
+          name: "Shell Fuel Hub - North Wing",
+          address: "88, Outer Ring Rd, Hebbal, Bangalore",
+          latitude: 13.035824,
+          longitude: 77.597802,
+          fuels: ["Petrol", "Diesel"]
+        },
+        {
+          name: "Indian Oil Bunk - Silicon Valley",
+          address: "244, 80 Feet Road, Koramangala, Bangalore",
+          latitude: 12.935158,
+          longitude: 77.624481,
+          fuels: ["Petrol", "Diesel", "EV Charging"]
+        },
+        {
+          name: "Hindustan Petroleum (HPCL) - West Side",
+          address: "5, Chord Road, Rajajinagar, Bangalore",
+          latitude: 12.989064,
+          longitude: 77.554311,
+          fuels: ["Petrol", "Diesel"]
+        }
+      ];
+      await Bunk.insertMany(defaultBunks);
+      console.log("Default bunks seeded successfully!");
+    }
+  } catch (error) {
+    console.error("Error seeding database:", error);
+  }
+}
+
+// DB Connection
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("MongoDB Connected");
+    seedDatabase();
+  })
+  .catch(err => console.log(err));
+
+// Server Start
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
