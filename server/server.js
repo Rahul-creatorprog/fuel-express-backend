@@ -47,43 +47,41 @@ async function seedDatabase() {
       console.log("Default Admin seeded. ID: 'admin', Mobile: '9876543210', Password: 'admin123'");
     }
 
-    // 2. Seed Bunks if none exist
-    const bunksCount = await Bunk.countDocuments();
-    if (bunksCount === 0) {
-      console.log("Seeding default petrol stations...");
-      const defaultBunks = [
-        {
-          name: "Bharat Petroleum (BPCL) - Central Station",
-          address: "12, Mahatma Gandhi Road, Bangalore",
-          latitude: 12.971598,
-          longitude: 77.594562,
-          fuels: ["Petrol", "Diesel", "EV Charging"]
-        },
-        {
-          name: "Shell Fuel Hub - North Wing",
-          address: "88, Outer Ring Rd, Hebbal, Bangalore",
-          latitude: 13.035824,
-          longitude: 77.597802,
-          fuels: ["Petrol", "Diesel"]
-        },
-        {
-          name: "Indian Oil Bunk - Silicon Valley",
-          address: "244, 80 Feet Road, Koramangala, Bangalore",
-          latitude: 12.935158,
-          longitude: 77.624481,
-          fuels: ["Petrol", "Diesel", "EV Charging"]
-        },
-        {
-          name: "Hindustan Petroleum (HPCL) - West Side",
-          address: "5, Chord Road, Rajajinagar, Bangalore",
-          latitude: 12.989064,
-          longitude: 77.554311,
-          fuels: ["Petrol", "Diesel"]
-        }
-      ];
-      await Bunk.insertMany(defaultBunks);
-      console.log("Default bunks seeded successfully!");
-    }
+    // 2. Seed Bunks (Clear and refresh to Tiruppur)
+    await Bunk.deleteMany({});
+    console.log("Seeding default Tiruppur petrol stations...");
+    const defaultBunks = [
+      {
+        name: "Bharat Petroleum (BPCL) - Tiruppur Central",
+        address: "Kumaran Road, Tiruppur, Tamil Nadu, 641601",
+        latitude: 11.108524,
+        longitude: 77.341065,
+        fuels: ["Petrol", "Diesel", "EV Charging"]
+      },
+      {
+        name: "Shell Fuel Hub - Tiruppur North",
+        address: "Avinashi Road, Tiruppur, Tamil Nadu, 641603",
+        latitude: 11.127532,
+        longitude: 77.324502,
+        fuels: ["Petrol", "Diesel"]
+      },
+      {
+        name: "Indian Oil Bunk - Tiruppur South",
+        address: "Dharapuram Road, Tiruppur, Tamil Nadu, 641604",
+        latitude: 11.085158,
+        longitude: 77.354481,
+        fuels: ["Petrol", "Diesel", "EV Charging"]
+      },
+      {
+        name: "Hindustan Petroleum (HPCL) - Tiruppur West",
+        address: "Kangayam Road, Tiruppur, Tamil Nadu, 641606",
+        latitude: 11.099064,
+        longitude: 77.314311,
+        fuels: ["Petrol", "Diesel"]
+      }
+    ];
+    await Bunk.insertMany(defaultBunks);
+    console.log("Default Tiruppur bunks seeded successfully!");
   } catch (error) {
     console.error("Error seeding database:", error);
   }

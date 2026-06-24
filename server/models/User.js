@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ["pending", "approved", "active"],
     default: function() {
-      return this.role === "partner" ? "pending" : "active";
+      return this.role === "partner" ? "approved" : "active";
     }
   },
   vehicleDetails: {

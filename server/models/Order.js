@@ -40,6 +40,13 @@ const orderSchema = new mongoose.Schema({
   partner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User"
+  },
+  partnerCoordinates: {
+    latitude: { type: Number },
+    longitude: { type: Number }
+  },
+  deliveryOtp: {
+    type: String
   }
 }, { timestamps: true });
 

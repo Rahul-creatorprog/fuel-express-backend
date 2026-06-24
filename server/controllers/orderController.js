@@ -1,25 +1,66 @@
 const Order = require("../models/Order");
+const Bunk = require("../models/Bunk");
+const User = require("../models/User");
+const SMSLog = require("../models/SMSLog");
+const { sendSMS } = require("../utils/smsService");
 
 const createOrder = async (req, res) => {
   try {
-    const { bunkId, fuelType, quantity, address, coordinates, phone } = req.body;
+    const { bunkId, bunkData, fuelType, quantity, address, coordinates, phone } = req.body;
 
-    if (!bunkId || !fuelType || !quantity || !address || !coordinates || !phone) {
+    if ((!bunkId && !bunkData) || !fuelType || !quantity || !address || !coordinates || !phone) {
       return res.status(400).json({ error: "Missing required fields for order creation" });
     }
 
+    // Get customer's registered mobile number
+    const customerUser = await User.findById(req.user.id);
+    if (!customerUser) {
+      return res.status(404).json({ error: "Customer user account not found" });
+    }
+    const registeredMobile = customerUser.mobile;
+
+    let finalBunkId = bunkId;
+
+    if (bunkData) {
+      // Find if we already saved this bunk (by name and location)
+      let bunk = await Bunk.findOne({ 
+        name: bunkData.name, 
+        latitude: bunkData.latitude, 
+        longitude: bunkData.longitude 
+      });
+      if (!bunk) {
+        bunk = new Bunk({
+          name: bunkData.name,
+          address: bunkData.address || "Address unavailable",
+          latitude: bunkData.latitude,
+          longitude: bunkData.longitude,
+          fuels: bunkData.fuels || ["Petrol", "Diesel", "EV Charging"]
+        });
+        await bunk.save();
+      }
+      finalBunkId = bunk._id;
+    }
+
+    // Generate 6-digit random verification OTP
+    const deliveryOtp = String(Math.floor(100000 + Math.random() * 900000));
+
     const order = new Order({
       customer: req.user.id,
-      bunk: bunkId,
+      bunk: finalBunkId,
       fuelType,
       quantity,
       address,
       coordinates,
       phone,
-      status: "Pending"
+      status: "Pending",
+      deliveryOtp
     });
 
     await order.save();
+
+    // Send SMS notification with OTP to user's registered mobile number
+    const messageContent = `Your Fuel Express order for ${fuelType} (${quantity} units) has been placed successfully! Your verification OTP is: ${deliveryOtp}. Please share this with the delivery partner upon arrival.`;
+    await sendSMS(registeredMobile, messageContent);
 
     res.status(201).json({
       message: "Order placed successfully!",
@@ -113,6 +154,14 @@ const acceptOrder = async (req, res) => {
     order.status = "Assigned";
     await order.save();
 
+    // Fetch customer & partner details to send notification
+    const customerUser = await User.findById(order.customer);
+    const partnerUser = await User.findById(partnerId);
+    if (customerUser && partnerUser) {
+      const messageContent = `A delivery partner has been assigned to your Fuel Express order! Partner Name: ${partnerUser.name}, Phone: ${partnerUser.mobile}.`;
+      await sendSMS(customerUser.mobile, messageContent);
+    }
+
     res.json({ message: "Order accepted successfully!", order });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -122,7 +171,7 @@ const acceptOrder = async (req, res) => {
 const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, otp } = req.body;
 
     const validStatuses = ["Out for Delivery", "Completed", "Cancelled"];
     if (!validStatuses.includes(status)) {
@@ -139,10 +188,78 @@ const updateOrderStatus = async (req, res) => {
       return res.status(403).json({ error: "You are not authorized to update this order" });
     }
 
+    // OTP verification when marking delivery as Completed
+    if (status === "Completed") {
+      if (!otp) {
+        return res.status(400).json({ error: "OTP is required to complete delivery. Please ask the customer." });
+      }
+      if (String(order.deliveryOtp) !== String(otp)) {
+        return res.status(400).json({ error: "Invalid OTP. Please ask the customer for the correct OTP." });
+      }
+    }
+
     order.status = status;
     await order.save();
 
+    // Fetch customer details to send status update SMS notification
+    const customerUser = await User.findById(order.customer);
+    if (customerUser) {
+      let messageContent = "";
+      if (status === "Out for Delivery") {
+        messageContent = `Your Fuel Express order for ${order.fuelType} is out for delivery! Please share OTP: ${order.deliveryOtp} with the delivery partner to verify and complete your delivery.`;
+      } else if (status === "Completed") {
+        messageContent = `Your Fuel Express order for ${order.fuelType} (${order.quantity} units) has been delivered successfully. Thank you for using Fuel Express!`;
+      } else if (status === "Cancelled") {
+        messageContent = `Your Fuel Express order for ${order.fuelType} has been cancelled.`;
+      }
+
+      if (messageContent) {
+        await sendSMS(customerUser.mobile, messageContent);
+      }
+    }
+
     res.json({ message: `Order status updated to ${status}`, order });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updateOrderLocation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: "Missing coordinates" });
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Auth verification: only the assigned partner can update their location
+    if (order.partner && order.partner.toString() !== req.user.id) {
+      return res.status(403).json({ error: "You are not authorized to update the location for this order" });
+    }
+
+    order.partnerCoordinates = { latitude, longitude };
+    await order.save();
+
+    res.json({ message: "Partner location updated successfully", partnerCoordinates: order.partnerCoordinates });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getSMSLogs = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const logs = await SMSLog.find({ to: user.mobile }).sort({ createdAt: -1 });
+    res.json(logs);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -152,5 +269,7 @@ module.exports = {
   createOrder,
   getOrders,
   acceptOrder,
-  updateOrderStatus
+  updateOrderStatus,
+  updateOrderLocation,
+  getSMSLogs
 };

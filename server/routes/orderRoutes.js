@@ -5,7 +5,9 @@ const {
   createOrder,
   getOrders,
   acceptOrder,
-  updateOrderStatus
+  updateOrderStatus,
+  updateOrderLocation,
+  getSMSLogs
 } = require("../controllers/orderController");
 
 // Get role-based orders list
@@ -19,5 +21,11 @@ router.put("/accept/:id", verifyToken, acceptOrder);
 
 // Update order status (Partner or Admin)
 router.put("/status/:id", verifyToken, updateOrderStatus);
+
+// Update partner location coordinates
+router.put("/location/:id", verifyToken, updateOrderLocation);
+
+// Fetch SMS logs for logged-in user
+router.get("/sms-logs", verifyToken, getSMSLogs);
 
 module.exports = router;

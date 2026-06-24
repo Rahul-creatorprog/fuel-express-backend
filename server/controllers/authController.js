@@ -32,7 +32,7 @@ const registerUser = async (req, res) => {
 
     // Add partner specific fields
     if (role === "partner") {
-      userData.status = "pending"; // Needs admin approval
+      userData.status = "approved"; // Auto-approved on registration! No admin review needed.
       userData.vehicleDetails = {
         vehicleType,
         vehicleNumber
@@ -100,11 +100,10 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Verify if partner is approved
+    // Auto-approve pending partners on login if they registered before the auto-approve update
     if (role === "partner" && user.status === "pending") {
-      return res.status(403).json({ 
-        error: "Your registration is currently under review by Admin. Please check back later." 
-      });
+      user.status = "approved";
+      await user.save();
     }
 
     // Sign JWT
@@ -131,7 +130,22 @@ const loginUser = async (req, res) => {
   }
 };
 
+const demoApprovePartner = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || user.role !== "partner") {
+      return res.status(403).json({ error: "Only registered delivery partners can auto-approve their profile" });
+    }
+    user.status = "approved";
+    await user.save();
+    res.json({ message: "Demo auto-approval successful! Profile approved.", status: user.status });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
-  loginUser
+  loginUser,
+  demoApprovePartner
 };
